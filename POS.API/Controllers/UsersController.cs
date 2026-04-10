@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.SignalR;
 using Pos.BuisnessLayer;
 using Pos.Datalayer.Dtos;
 using POS.Shared.Responses;
+using Serilog;
 
 namespace POS.API.Controllers
 {
@@ -47,9 +48,32 @@ namespace POS.API.Controllers
             }
 
         }
+        [HttpDelete("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult>DeleteUser(int id)
+        {
+            Log.Information("Controller: Deleting user ID {Id}", id);
+            var result= await _userService.DeleteUser(id);
 
+         switch (result.Status) 
+        {
+                case UserOperationResult.Success:
+                    return Ok(new { Message = result.Message, UserID = result.Data });
 
+                case UserOperationResult.InvalidData:
+                    return BadRequest(new { Message = result.Message }); 
 
+                case UserOperationResult.NotFound:
+                    return NotFound(new { Message = result.Message });
+
+                default:
+                    return StatusCode(500, new { Message = result.Message });
+            }
+
+        }
 
 
 

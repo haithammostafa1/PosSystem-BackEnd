@@ -12,6 +12,7 @@ namespace Pos.Datalayer
     public interface IUserRepository
     {
         Task<OperationResult<int>> AddNewUser(UserCreatedDto dto);
+        Task<OperationResult<int>> DeleteUser(int id);
 
     }
     public class UserRepository : IUserRepository
@@ -64,6 +65,43 @@ namespace Pos.Datalayer
             catch (Exception ex)
             {
                 Log.Error(ex, "DAL: Error adding user");
+                throw;
+            }
+        }
+
+        public  async Task<OperationResult<int>> DeleteUser(int id)
+        {
+            Log.Information("DAL: Deleting user {Id}", id);
+
+            try
+            {
+                using SqlConnection conn = new(_connectionString);
+
+                using SqlCommand cmd = new("sp_DeleteUser", conn);
+
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@Id", SqlDbType.Int).Value = id;
+
+                var returnParam = cmd.Parameters.Add("@ReturnVal", SqlDbType.Int);
+                returnParam.Direction = ParameterDirection.ReturnValue;
+
+                await conn.OpenAsync();
+                await cmd.ExecuteNonQueryAsync();
+
+                int result = (int)returnParam.Value;
+                if (result == 0)
+                {
+                    Log.Warning("DAL: User {Id} not found for deletion", id);
+                    return OperationResult<int>.FailureResult(UserOperationResult.NotFound, "User Doesnt Exists");
+
+                }
+                return OperationResult<int>.SuccessResult(id, "User Deleted Successfully");
+
+
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "DAL: Error deleting user");
                 throw;
             }
         }

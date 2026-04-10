@@ -39,18 +39,7 @@
 
 
 
-        public class Responces
-        {
+       
 
-
-
-
-
-
-
-
-
-
-        }
     }
 }
