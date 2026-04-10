@@ -4,12 +4,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Pos.BuisnessLayer;
 using Pos.Datalayer.Dtos;
+using Pos.Datalayer.Helpers;
 using POS.Shared.Responses;
 using Serilog;
+using System.Text.Json;
 
 namespace POS.API.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/Users")]
     [ApiController]
     public class UsersController : ControllerBase
     {
@@ -75,8 +77,67 @@ namespace POS.API.Controllers
 
         }
 
+        [HttpGet("GetAllUsersPaged")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public  async Task<ActionResult<OperationResult<PagedList<UserResponseDto>>>> GetAllUsersPaged([FromQuery] PaginationParams pagination)
+        {
+
+            Log.Information("Controller: Getting all users, page {PageNumber}, size {PageSize}", pagination.PageNumber, pagination.PageSize);
+
+            var pagedList= await _userService.GetAllUsersPaged(pagination);
+
+            if (pagedList.Status != UserOperationResult.Success || pagedList.Data == null)
+            {
+                return BadRequest(new { Message = pagedList.Message });
+            }
+
+            var metaData = new
+            {
+                pagedList.Data.MetaData.TotalCount,
+                pagedList.Data.MetaData.PageSize,
+                pagedList.Data.MetaData.CurrentPage,
+                pagedList.Data.MetaData.TotalPages,
+                pagedList.Data.MetaData.HasNext,
+                pagedList.Data.MetaData.HasPrevious
+
+            };
+            Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(metaData));
+
+            return Ok(pagedList);
 
 
+
+
+
+        }
+        [HttpGet("GetUserById")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult>GetUserById(int id)
+        {
+
+           Log.Information("Controller: Getting user with ID {Id}", id);
+
+            var result= await _userService.GetUserById(id);
+            if (result == null)
+                return StatusCode(500, new { Message = "CONTROLLER : AN ERRORR OCCUERD ." });
+            
+            
+            switch (result.Status)
+           {
+                case UserOperationResult.Success:
+                    return Ok(new {Message=result.Message,userid=result.Data});
+
+                case UserOperationResult.NotFound:
+                    return NotFound(new { Message = result.Message });
+
+                default:
+                    return StatusCode(500, new { Message = result.Message });
+
+            }
+
+        }
 
 
 
