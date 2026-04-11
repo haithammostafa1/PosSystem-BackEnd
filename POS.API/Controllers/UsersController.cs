@@ -202,5 +202,40 @@ namespace POS.API.Controllers
             }
         }
 
+        [HttpPut("ChangeUserPassword")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task <IActionResult>ChangePassword(int id,[FromBody] ChangePasswordDto passwordDto)
+        {
+            Log.Information("Controller: Changing password for user ID {Id}", id);
+            var result = await _userService.ChangeUserPassword(id, passwordDto.NewPassword);
+
+          switch (result.Status)
+           {
+                case UserOperationResult.Success:
+                    return Ok(new { Message = result.Message, UserId = result.Data });
+
+                case UserOperationResult.NotFound:
+                    return NotFound(new { Message = result.Message });
+
+                case UserOperationResult.DuplicateUsername:
+                case UserOperationResult.InvalidData:
+                    return BadRequest(new { Message = result.Message });
+
+                default:
+                    return StatusCode(500, new { Message = result.Message });
+
+            }
+
+
+
+
+
+
+        }
+
+
     }
 }
