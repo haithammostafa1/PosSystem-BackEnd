@@ -165,7 +165,42 @@ namespace POS.API.Controllers
 
             }
         }
+        [HttpPut("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateUser(int id, [FromBody] UserResponseDto dto)
+        {
+            Log.Information("Controller: Attempting to update user {Id}", id);
 
+            if (id != dto.Id)
+            {
+                Log.Warning("Controller: Update ID mismatch. Route ID: {RouteId}, Body ID: {BodyId}", id, dto.Id);
+                return BadRequest(new { Message = "رقم المستخدم في الرابط لا يتطابق مع الرقم داخل البيانات المرسلة" });
+            }
+
+            var result = await _userService.UpdateUser(dto);
+
+            if (result == null)
+                return StatusCode(500, new { Message = "حدث خطأ داخلي في الخادم." });
+
+            switch (result.Status)
+            {
+                case UserOperationResult.Success:
+                    return Ok(new { Message = result.Message, UserId = result.Data });
+
+                case UserOperationResult.NotFound:
+                    return NotFound(new { Message = result.Message });
+
+                case UserOperationResult.DuplicateUsername:
+                case UserOperationResult.InvalidData:
+                    return BadRequest(new { Message = result.Message });
+
+                default:
+                    return StatusCode(500, new { Message = result.Message });
+            }
+        }
 
     }
 }
