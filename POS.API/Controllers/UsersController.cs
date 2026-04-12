@@ -37,12 +37,12 @@ namespace POS.API.Controllers
 
              switch (Result.Status)
             {
-                case UserOperationResult.Success:
+                case OperationStatus.Success:
                     return Ok(new {Message=Result.Message, UserID= Result.Data});
 
-                case UserOperationResult.DuplicateUsername:
+                case OperationStatus.DuplicateRecord:
                     return Conflict(new { Message = Result.Message });
-                case UserOperationResult.InvalidData:
+                case OperationStatus.InvalidData:
                     return BadRequest(new {Message= Result.Message});
 
                 default:
@@ -63,13 +63,13 @@ namespace POS.API.Controllers
 
          switch (result.Status) 
         {
-                case UserOperationResult.Success:
+                case OperationStatus.Success:
                     return Ok(new { Message = result.Message, UserID = result.Data });
 
-                case UserOperationResult.InvalidData:
+                case OperationStatus.InvalidData:
                     return BadRequest(new { Message = result.Message }); 
 
-                case UserOperationResult.NotFound:
+                case OperationStatus.NotFound:
                     return NotFound(new { Message = result.Message });
 
                 default:
@@ -88,7 +88,7 @@ namespace POS.API.Controllers
 
             var pagedList= await _userService.GetAllUsersPaged(pagination);
 
-            if (pagedList.Status != UserOperationResult.Success || pagedList.Data == null)
+            if (pagedList.Status != OperationStatus.Success || pagedList.Data == null)
             {
                 return BadRequest(new { Message = pagedList.Message });
             }
@@ -127,10 +127,10 @@ namespace POS.API.Controllers
             
             switch (result.Status)
            {
-                case UserOperationResult.Success:
+                case OperationStatus.Success:
                     return Ok(new {Message=result.Message,userid=result.Data});
 
-                case UserOperationResult.NotFound:
+                case OperationStatus.NotFound:
                     return NotFound(new { Message = result.Message });
 
                 default:
@@ -154,10 +154,10 @@ namespace POS.API.Controllers
 
             switch (result.Status)
             {
-                case UserOperationResult.Success:
+                case OperationStatus.Success:
                     return Ok(new { Message = result.Message, userid = result.Data });
 
-                case UserOperationResult.NotFound:
+                case OperationStatus.NotFound:
                     return NotFound(new { Message = result.Message });
 
                 default:
@@ -187,14 +187,14 @@ namespace POS.API.Controllers
 
             switch (result.Status)
             {
-                case UserOperationResult.Success:
+                case OperationStatus.Success:
                     return Ok(new { Message = result.Message, UserId = result.Data });
 
-                case UserOperationResult.NotFound:
+                case OperationStatus.NotFound:
                     return NotFound(new { Message = result.Message });
 
-                case UserOperationResult.DuplicateUsername:
-                case UserOperationResult.InvalidData:
+                case OperationStatus.DuplicateRecord:
+                case OperationStatus.InvalidData:
                     return BadRequest(new { Message = result.Message });
 
                 default:
@@ -214,14 +214,14 @@ namespace POS.API.Controllers
 
           switch (result.Status)
            {
-                case UserOperationResult.Success:
+                case OperationStatus.Success:
                     return Ok(new { Message = result.Message, UserId = result.Data });
 
-                case UserOperationResult.NotFound:
+                case OperationStatus.NotFound:
                     return NotFound(new { Message = result.Message });
 
-                case UserOperationResult.DuplicateUsername:
-                case UserOperationResult.InvalidData:
+                case OperationStatus.DuplicateRecord:
+                case OperationStatus.InvalidData:
                     return BadRequest(new { Message = result.Message });
 
                 default:
