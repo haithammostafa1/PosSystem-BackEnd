@@ -1,8 +1,8 @@
 ﻿using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Pos.Datalayer.Helpers;
-using POS.Shared.Responses;
 using POS.Shared.Responses.DTOs;
+using POS.Shared.Responses.Enums;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -14,18 +14,25 @@ using System.Threading.Tasks;
 namespace Pos.Datalayer
 {
     public interface IProductRepository
-    {
-        Task<OperationResult<int>> AddNewProduct(ProductSaveDto dto);
-        Task<OperationResult<int>> UpdateProduct(ProductSaveDto dto);
-        Task<OperationResult<int>> DeleteProduct(int id);
-        Task<OperationResult<ProductResponseDto>> GetProductById(int id);
-        Task<OperationResult<PagedList<ProductResponseDto>>> GetAllProductsPaged(PaginationParams pagination);
-        Task<OperationResult<int>> DecreaseProductQuantity(int productId, int quantityToSubtract);
-        Task<OperationResult<int>> IncreaseProductQuantity(int productId, int quantityToAdd);
+    {      
+        Task<int> AddNewProduct(ProductSaveDto dto);
+        Task<int> UpdateProduct(ProductSaveDto dto);
+        Task<int> DeleteProduct(int id);
+        Task<ProductResponseDto?> GetProductById(int id);
+        Task<(List<ProductResponseDto> Products, int TotalCount)> GetAllProductsPaged(PaginationParams pagination);
+        Task<int> DecreaseProductQuantity(
+            int productId,
+            int quantityToSubtract,
+            StockMovementType movementType,
+            string? reference = null);
+        Task<int> IncreaseProductQuantity(
+            int productId,
+            int quantityToAdd,
+            StockMovementType movementType,
+            string? reference = null);
+
         Task<bool> CheckProductNameExists(string name, int? excludeId = null);
         Task<bool> IsProductExistById(int id);
-
-
     }
     public class ProductRepository : IProductRepository
     {
@@ -37,151 +44,110 @@ namespace Pos.Datalayer
                 ?? throw new InvalidOperationException("Connection string not found.");
         }
 
-        public async Task<OperationResult<ProductResponseDto>> GetProductById(int id)
+        public async Task<ProductResponseDto?> GetProductById(int id)//
         {
             Log.Information("DAL: Getting product by ID {Id}", id);
-            ProductResponseDto? product = null;
 
-            try
+            using SqlConnection conn = new(_connectionString);
+            using SqlCommand cmd = new("sp_GetProductById", conn);
+
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Parameters.Add("@Id", SqlDbType.Int).Value = id;
+
+            await conn.OpenAsync();
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
             {
-                using SqlConnection conn = new(_connectionString);
-                using SqlCommand cmd = new("sp_GetProductById", conn);
-                cmd.CommandType = CommandType.StoredProcedure;
-                cmd.Parameters.Add("@Id", SqlDbType.Int).Value = id;
-
-                await conn.OpenAsync();
-                using var reader = await cmd.ExecuteReaderAsync();
-
-                if (await reader.ReadAsync())
-                {
-                    product = MapToProductResponseDto(reader);
-                    return OperationResult<ProductResponseDto>.SuccessResult(product, "تم جلب بيانات المنتج بنجاح");
-                }
-
-                Log.Warning("DAL: Product {Id} not found", id);
-                return OperationResult<ProductResponseDto>.FailureResult(OperationStatus.NotFound, "المنتج غير موجود");
+                return MapToProductResponseDto(reader);
             }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "DAL: Error getting product {Id}", id);
-                throw;
-            }
+
+            Log.Warning("DAL: Product {Id} not found", id);
+            return null;
         }
 
-        public async Task<OperationResult<int>> AddNewProduct(ProductSaveDto dto)
+        public async Task<int> AddNewProduct(ProductSaveDto dto)
         {
             Log.Information("DAL: Adding new product {Name}", dto.Name);
-            try
-            {
-                using SqlConnection conn = new(_connectionString);
-                using SqlCommand cmd = new("sp_AddNewProduct", conn);
-                cmd.CommandType = CommandType.StoredProcedure;
 
-                cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 150).Value = dto.Name;
-                cmd.Parameters.Add("@Barcode", SqlDbType.NVarChar, 100).Value = (object?)dto.Barcode ?? DBNull.Value;
-                cmd.Parameters.Add("@Price", SqlDbType.Decimal).Value = dto.Price;
-                cmd.Parameters.Add("@Cost", SqlDbType.Decimal).Value = dto.Cost;
-                cmd.Parameters.Add("@Quantity", SqlDbType.Int).Value = dto.Quantity;
-                cmd.Parameters.Add("@CategoryId", SqlDbType.Int).Value = dto.CategoryId;
+            using SqlConnection conn = new(_connectionString);
+            using SqlCommand cmd = new("sp_AddNewProduct", conn);
 
-                var newIdParam = cmd.Parameters.Add("@NewId", SqlDbType.Int);
-                newIdParam.Direction = ParameterDirection.Output;
+            cmd.CommandType = CommandType.StoredProcedure;
 
-                await conn.OpenAsync();
-                await cmd.ExecuteNonQueryAsync();
+            cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 150).Value = dto.Name;
+            cmd.Parameters.Add("@Barcode", SqlDbType.NVarChar, 100).Value = (object?)dto.Barcode ?? DBNull.Value;
+            cmd.Parameters.Add("@Price", SqlDbType.Decimal).Value = dto.Price;
+            cmd.Parameters.Add("@Cost", SqlDbType.Decimal).Value = dto.Cost;
+            cmd.Parameters.Add("@Quantity", SqlDbType.Int).Value = dto.Quantity;
+            cmd.Parameters.Add("@CategoryId", SqlDbType.Int).Value = dto.CategoryId;
 
-                int newId = (int)newIdParam.Value;
+            // ✅ Output parameter
+            var newIdParam = cmd.Parameters.Add("@NewId", SqlDbType.Int);
+            newIdParam.Direction = ParameterDirection.Output;
 
-                if (newId == -1)
-                {
-                    Log.Warning("DAL: Barcode already exists");
-                    return OperationResult<int>.FailureResult(OperationStatus.InvalidData, "رقم الباركود مسجل لمنتج آخر");
-                }
-                if (newId > 0)
-                {
-                    return OperationResult<int>.SuccessResult(newId, "تم إضافة المنتج بنجاح");
-                }
+            await conn.OpenAsync();
+            await cmd.ExecuteNonQueryAsync();
 
-                return OperationResult<int>.FailureResult(OperationStatus.Failed, "حدث خطأ أثناء إضافة المنتج");
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "DAL: Error adding product");
-                throw;
-            }
-        }
+            int result = (int)newIdParam.Value;
 
-        public async Task<OperationResult<int>> UpdateProduct(ProductSaveDto dto)
+            Log.Information("DAL: Add product result: {Result}", result);
+
+            return result;
+        }//
+        public async Task<int> UpdateProduct(ProductSaveDto dto)
         {
             Log.Information("DAL: Updating product {Id}", dto.Id);
-            try
-            {
-                using SqlConnection conn = new(_connectionString);
-                using SqlCommand cmd = new("sp_UpdateProduct", conn);
-                cmd.CommandType = CommandType.StoredProcedure;
 
-                cmd.Parameters.Add("@Id", SqlDbType.Int).Value = dto.Id;
-                cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 150).Value = dto.Name;
-                cmd.Parameters.Add("@Barcode", SqlDbType.NVarChar, 100).Value = (object?)dto.Barcode ?? DBNull.Value;
-                cmd.Parameters.Add("@Price", SqlDbType.Decimal).Value = dto.Price;
-                cmd.Parameters.Add("@Cost", SqlDbType.Decimal).Value = dto.Cost;
-                cmd.Parameters.Add("@Quantity", SqlDbType.Int).Value = dto.Quantity;
-                cmd.Parameters.Add("@CategoryId", SqlDbType.Int).Value = dto.CategoryId;
+            using SqlConnection conn = new(_connectionString);
+            using SqlCommand cmd = new("sp_UpdateProduct", conn);
 
-                var returnParam = cmd.Parameters.Add("@ReturnVal", SqlDbType.Int);
-                returnParam.Direction = ParameterDirection.ReturnValue;
+            cmd.CommandType = CommandType.StoredProcedure;
 
-                await conn.OpenAsync();
-                await cmd.ExecuteNonQueryAsync();
+            cmd.Parameters.Add("@Id", SqlDbType.Int).Value = dto.Id;
+            cmd.Parameters.Add("@Name", SqlDbType.NVarChar, 150).Value = dto.Name;
+            cmd.Parameters.Add("@Barcode", SqlDbType.NVarChar, 100).Value = (object?)dto.Barcode ?? DBNull.Value;
+            cmd.Parameters.Add("@Price", SqlDbType.Decimal).Value = dto.Price;
+            cmd.Parameters.Add("@Cost", SqlDbType.Decimal).Value = dto.Cost;
+            cmd.Parameters.Add("@Quantity", SqlDbType.Int).Value = dto.Quantity;
+            cmd.Parameters.Add("@CategoryId", SqlDbType.Int).Value = dto.CategoryId;
 
-                int result = (int)returnParam.Value;
+            var returnParam = cmd.Parameters.Add("@ReturnVal", SqlDbType.Int);
+            returnParam.Direction = ParameterDirection.ReturnValue;
 
-                if (result == 1)
-                    return OperationResult<int>.SuccessResult(dto.Id, "تم تعديل المنتج بنجاح");
-                if (result == -1)
-                    return OperationResult<int>.FailureResult(OperationStatus.InvalidData, "الباركود مسجل لمنتج آخر");
-                if (result == 0)
-                    return OperationResult<int>.FailureResult(OperationStatus.NotFound, "المنتج غير موجود");
+            await conn.OpenAsync();
+            await cmd.ExecuteNonQueryAsync();
 
-                return OperationResult<int>.FailureResult(OperationStatus.Failed, "خطأ غير متوقع");
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "DAL: Error updating product {Id}", dto.Id);
-                throw;
-            }
+            int result = (int)returnParam.Value;
+
+            Log.Information("DAL: Update product result {Result}", result);
+
+            return result;
         }
 
-        public async Task<OperationResult<int>> DeleteProduct(int id)
+        public async Task<int> DeleteProduct(int id)
         {
             Log.Information("DAL: Deleting product {Id}", id);
-            try
-            {
-                using SqlConnection conn = new(_connectionString);
-                using SqlCommand cmd = new("sp_DeleteProduct", conn);
-                cmd.CommandType = CommandType.StoredProcedure;
-                cmd.Parameters.Add("@Id", SqlDbType.Int).Value = id;
 
-                var returnParam = cmd.Parameters.Add("@ReturnVal", SqlDbType.Int);
-                returnParam.Direction = ParameterDirection.ReturnValue;
+            using SqlConnection conn = new(_connectionString);
+            using SqlCommand cmd = new("sp_DeleteProduct", conn);
 
-                await conn.OpenAsync();
-                await cmd.ExecuteNonQueryAsync();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Parameters.Add("@Id", SqlDbType.Int).Value = id;
 
-                int result = (int)returnParam.Value;
+            var returnParam = cmd.Parameters.Add("@ReturnVal", SqlDbType.Int);
+            returnParam.Direction = ParameterDirection.ReturnValue;
 
-                if (result == 1)
-                    return OperationResult<int>.SuccessResult(id, "تم حذف المنتج بنجاح");
+            await conn.OpenAsync();
+            await cmd.ExecuteNonQueryAsync();
 
-                return OperationResult<int>.FailureResult(OperationStatus.NotFound, "المنتج غير موجود أو تم حذفه مسبقاً");
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "DAL: Error deleting product {Id}", id);
-                throw;
-            }
+            int result = (int)returnParam.Value;
+
+            Log.Information("DAL: Delete product result {Result}", result);
+
+            return result;
         }
-        public async Task<OperationResult<PagedList<ProductResponseDto>>> GetAllProductsPaged(PaginationParams pagination)
+        public async Task<(List<ProductResponseDto> Products, int TotalCount)> GetAllProductsPaged(PaginationParams pagination)
         {
             Log.Information("DAL: Fetching paged products. Page: {Page}, Size: {Size}",
                 pagination.PageNumber, pagination.PageSize);
@@ -189,112 +155,91 @@ namespace Pos.Datalayer
             var products = new List<ProductResponseDto>();
             int totalCount = 0;
 
-            try
+            using SqlConnection conn = new(_connectionString);
+            using SqlCommand cmd = new("sp_GetAllProductsPaged", conn);
+
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Parameters.Add("@PageNumber", SqlDbType.Int).Value = pagination.PageNumber;
+            cmd.Parameters.Add("@PageSize", SqlDbType.Int).Value = pagination.PageSize;
+
+            var totalCountParam = cmd.Parameters.Add("@TotalCount", SqlDbType.Int);
+            totalCountParam.Direction = ParameterDirection.Output;
+
+            await conn.OpenAsync();
+
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
             {
-                using SqlConnection conn = new(_connectionString);
-                using SqlCommand cmd = new("sp_GetAllProductsPaged", conn);
-                cmd.CommandType = CommandType.StoredProcedure;
-
-                cmd.Parameters.Add("@PageNumber", SqlDbType.Int).Value = pagination.PageNumber;
-                cmd.Parameters.Add("@PageSize", SqlDbType.Int).Value = pagination.PageSize;
-
-                // بارامتر المخرجات لجلب العدد الكلي
-                var totalCountParam = cmd.Parameters.Add("@TotalCount", SqlDbType.Int);
-                totalCountParam.Direction = ParameterDirection.Output;
-
-                await conn.OpenAsync();
-                using var reader = await cmd.ExecuteReaderAsync();
-
-                while (await reader.ReadAsync())
-                {
-                    products.Add(MapToProductResponseDto(reader));
-                }
-
-                await reader.CloseAsync();
-
-                if (totalCountParam.Value is int tc) totalCount = tc;
-
-                var pagedData = new PagedList<ProductResponseDto>(products, totalCount, pagination.PageNumber, pagination.PageSize);
-
-                return OperationResult<PagedList<ProductResponseDto>>.SuccessResult(pagedData, "تم جلب المنتجات بنجاح");
+                products.Add(MapToProductResponseDto(reader));
             }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "DAL: Error fetching paged products");
-                throw;
-            }
+
+            await reader.CloseAsync();
+
+            if (totalCountParam.Value is int tc)
+                totalCount = tc;
+
+            return (products, totalCount);
         }
 
-        public async Task<OperationResult<int>> DecreaseProductQuantity(int productId, int quantityToSubtract)
+        public async Task<int> DecreaseProductQuantity(int productId, int quantityToSubtract,
+             StockMovementType movementType, string? reference = null)
+
         {
             Log.Information("DAL: Decreasing quantity for product {Id} by {Quantity}", productId, quantityToSubtract);
 
-            try
-            {
-                using SqlConnection conn = new(_connectionString);
-                using SqlCommand cmd = new("sp_DecreaseProductQuantity", conn);
-                cmd.CommandType = CommandType.StoredProcedure;
+            using SqlConnection conn = new(_connectionString);
+            using SqlCommand cmd = new("sp_DecreaseProductQuantity", conn);
 
-                cmd.Parameters.Add("@ProductId", SqlDbType.Int).Value = productId;
-                cmd.Parameters.Add("@QuantityToSubtract", SqlDbType.Int).Value = quantityToSubtract;
+            cmd.CommandType = CommandType.StoredProcedure;
 
-                // استقبال النتيجة المرتجعة من قاعدة البيانات (RETURN)
-                var returnParam = cmd.Parameters.Add("@ReturnVal", SqlDbType.Int);
-                returnParam.Direction = ParameterDirection.ReturnValue;
+            cmd.Parameters.Add("@ProductId", SqlDbType.Int).Value = productId;
+            cmd.Parameters.Add("@QuantityToSubtract", SqlDbType.Int).Value = quantityToSubtract;
+            cmd.Parameters.Add("@MovementType", SqlDbType.Int).Value = (int)movementType;
+            cmd.Parameters.Add("@Reference", SqlDbType.NVarChar, 100).Value = (object?)reference ?? DBNull.Value;
 
-                await conn.OpenAsync();
-                await cmd.ExecuteNonQueryAsync();
+            var returnParam = cmd.Parameters.Add("@ReturnVal", SqlDbType.Int);
+            returnParam.Direction = ParameterDirection.ReturnValue;
 
-                int result = (int)returnParam.Value;
+            await conn.OpenAsync();
+            await cmd.ExecuteNonQueryAsync();
 
-                // 🌟 تطبيق الـ Result Pattern ببراعة
-                return result switch
-                {
-                    1 => OperationResult<int>.SuccessResult(productId, "تم خصم الكمية بنجاح"),
-                    -3 => OperationResult<int>.FailureResult(OperationStatus.InsufficientStock, "الكمية المتاحة في المخزن لا تكفي لإتمام العملية"),
-                    _ => OperationResult<int>.FailureResult(OperationStatus.Failed, "حدث خطأ غير متوقع في قاعدة البيانات أثناء الخصم")
-                };
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "DAL: Error decreasing quantity for product {Id}", productId);
-                throw;
-            }
+            int result = (int)returnParam.Value;
+
+            Log.Information("DAL: Decrease quantity result {Result}", result);
+
+            return result;
         }
 
-        public async Task<OperationResult<int>> IncreaseProductQuantity(int productId, int quantityToAdd)
+        public async Task<int> IncreaseProductQuantity(
+      int productId,
+      int quantityToAdd,
+      StockMovementType movementType,
+      string? reference = null)
         {
             Log.Information("DAL: Increasing quantity for product {Id} by {Quantity}", productId, quantityToAdd);
 
-            try
-            {
-                using SqlConnection conn = new(_connectionString);
-                using SqlCommand cmd = new("sp_IncreaseProductQuantity", conn);
-                cmd.CommandType = CommandType.StoredProcedure;
+            using SqlConnection conn = new(_connectionString);
+            using SqlCommand cmd = new("sp_IncreaseProductQuantity", conn);
 
-                cmd.Parameters.Add("@ProductId", SqlDbType.Int).Value = productId;
-                cmd.Parameters.Add("@QuantityToAdd", SqlDbType.Int).Value = quantityToAdd;
+            cmd.CommandType = CommandType.StoredProcedure;
 
-                var returnParam = cmd.Parameters.Add("@ReturnVal", SqlDbType.Int);
-                returnParam.Direction = ParameterDirection.ReturnValue;
+            cmd.Parameters.Add("@ProductId", SqlDbType.Int).Value = productId;
+            cmd.Parameters.Add("@QuantityToAdd", SqlDbType.Int).Value = quantityToAdd;
+            cmd.Parameters.Add("@MovementType", SqlDbType.Int).Value = (int)movementType;
+            cmd.Parameters.Add("@Reference", SqlDbType.NVarChar, 100).Value = (object?)reference ?? DBNull.Value;
 
-                await conn.OpenAsync();
-                await cmd.ExecuteNonQueryAsync();
+            var returnParam = cmd.Parameters.Add("@ReturnVal", SqlDbType.Int);
+            returnParam.Direction = ParameterDirection.ReturnValue;
 
-                int result = (int)returnParam.Value;
+            await conn.OpenAsync();
+            await cmd.ExecuteNonQueryAsync();
 
-                return result switch
-                {
-                    1 => OperationResult<int>.SuccessResult(productId, "تم زيادة الكمية بنجاح"),
-                    0 => OperationResult<int>.FailureResult(OperationStatus.NotFound, "المنتج غير موجود"),
-                    _ => OperationResult<int>.FailureResult(OperationStatus.Failed, "حدث خطأ غير متوقع في قاعدة البيانات أثناء الزيادة")
-                };
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "DAL: Error increasing quantity for product {Id}", productId);
-                throw;
-            }
+            int result = (int)returnParam.Value;
+
+            Log.Information("DAL: Increase quantity result {Result}", result);
+
+            return result;
         }
         public async Task<bool> CheckProductNameExists(string name, int? excludeId = null)
         {
@@ -366,6 +311,7 @@ namespace Pos.Datalayer
                 Price = reader.GetDecimal(reader.GetOrdinal("Price")),
                 Cost = reader.GetDecimal(reader.GetOrdinal("Cost")),
                 Quantity = reader.GetInt32(reader.GetOrdinal("Quantity")),
+                CategoryName = reader.IsDBNull(reader.GetOrdinal("CategoryName")) ? "بدون قسم" : reader.GetString(reader.GetOrdinal("CategoryName")),
                 CategoryId = reader.GetInt32(reader.GetOrdinal("CategoryId")),
                 CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
                 UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))

@@ -10,6 +10,7 @@ namespace POS.Shared.Responses.DTOs
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
+        public string CategoryName { get; set; }= string.Empty;
         public string? Barcode { get; set; } 
         public decimal Price { get; set; }
         public decimal Cost { get; set; }
