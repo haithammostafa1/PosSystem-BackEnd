@@ -24,6 +24,8 @@ builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
+builder.Services.AddScoped<IInvoiceDetailsService, InvoiceDetailsService>();
+builder.Services.AddScoped<IInvoiceDetailsRepository, InvoiceDetailsRepository>();
 
 builder.Services.AddSwaggerGen();
 
