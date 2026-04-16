@@ -6,7 +6,15 @@ using System.Threading.Tasks;
 
 namespace Pos.Datalayer.Helpers
 {
-    internal class PagedList
+    public class PagedList<T>
     {
+        public List<T> Items { get; set; }
+        public PaginationMetaData MetaData { get; set; }
+
+        public PagedList(List<T> items, int count, int pageNumber, int pageSize)
+        {
+            MetaData = new PaginationMetaData(count, pageNumber, pageSize);
+            Items = items;
+        }
     }
 }
