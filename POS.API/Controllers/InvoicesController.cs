@@ -19,7 +19,79 @@ namespace POS.API.Controllers
         {
             _invoiceService = invoiceService;
         }
+        [HttpGet("GetInvoiceWithDetails/{id}")]
+        public async Task<IActionResult> GetInvoiceWithDetails(int id)
+        {
+            Log.Information("Controller: Getting full invoice {Id}", id);
 
+            var result = await _invoiceService.GetInvoiceById(id);
+
+            return result.Status switch
+            {
+                OperationStatus.Success => Ok(new
+                {
+                    message = result.Message,
+                    data = result.Data
+                }),
+
+                OperationStatus.NotFound => NotFound(new
+                {
+                    message = result.Message
+                }),
+
+                OperationStatus.InvalidData => BadRequest(new
+                {
+                    message = result.Message
+                }),
+
+                _ => StatusCode(500, new
+                {
+                    message = result.Message
+                })
+            };
+        }
+        [HttpPost("CreateFullInvoice")]
+        [ProducesResponseType(StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        public async Task<IActionResult> CreateFullInvoice([FromBody] InvoiceCreateDto dto)
+        {
+            Log.Information("Controller: Creating full invoice {Number}", dto.InvoiceNumber);
+
+            if (dto == null)
+            {
+                return BadRequest(new { message = "Invalid request data" });
+            }
+
+            var result = await _invoiceService.CreateInvoiceFullFlow(dto);
+
+            return result.Status switch
+            {
+                OperationStatus.Success => CreatedAtAction(
+                    nameof(GetInvoiceWithDetails), // 🔥 رجعنا الفاتورة الكاملة
+                    new { id = result.Data },
+                    new
+                    {
+                        message = result.Message,
+                        invoiceId = result.Data
+                    }),
+
+                OperationStatus.DuplicateRecord => Conflict(new
+                {
+                    message = result.Message
+                }),
+
+                OperationStatus.InvalidData => BadRequest(new
+                {
+                    message = result.Message
+                }),
+
+                _ => StatusCode(500, new
+                {
+                    message = result.Message
+                })
+            };
+        }
         [HttpGet("GetAllInvoicesPaged")]
         public async Task<ActionResult> GetAllInvoicesPaged([FromQuery] PaginationParams pagination)
         {

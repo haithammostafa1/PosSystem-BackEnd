@@ -7,25 +7,24 @@ using POS.Shared.Responses.Enums;
 
 namespace POS.API.Controllers
 {
-    [Route("api/InvoiceDetails")]
+    [Route("api/StockMovements")]
     [ApiController]
-    public class InvoiceDetailsController : ControllerBase
+    public class StockMovementsController : ControllerBase
     {
-        private readonly IInvoiceDetailsService _service;
+        private readonly IStockMovementService _service;
 
-        public InvoiceDetailsController(IInvoiceDetailsService service)
+        public StockMovementsController(IStockMovementService service)
         {
             _service = service;
         }
 
-    
-
-        [HttpGet("GetByInvoiceId/{invoiceId}")]
-        public async Task<IActionResult> GetByInvoiceId(int invoiceId)
+        // 🟢 Get by ProductId
+        [HttpGet("GetByProductId/{productId}")]
+        public async Task<IActionResult> GetByProductId(int productId)
         {
-            Log.Information("Controller: Getting invoice details {Id}", invoiceId);
+            Log.Information("Controller: Getting stock movements for product {Id}", productId);
 
-            var result = await _service.GetByInvoiceId(invoiceId);
+            var result = await _service.GetByProductId(productId);
 
             return result.Status switch
             {
@@ -47,12 +46,13 @@ namespace POS.API.Controllers
             };
         }
 
-        [HttpDelete("DeleteByInvoiceId/{invoiceId}")]
-        public async Task<IActionResult> DeleteByInvoiceId(int invoiceId)
+        // 🔴 (اختياري) Add Movement - غالبًا مش هتستخدمه
+        [HttpPost("AddStockMovement")]
+        public async Task<IActionResult> AddStockMovement([FromBody] StockMovementDto dto)
         {
-            Log.Information("Controller: Deleting invoice details {Id}", invoiceId);
+            Log.Information("Controller: Adding stock movement for product {Id}", dto.ProductId);
 
-            var result = await _service.DeleteByInvoiceId(invoiceId);
+            var result = await _service.AddStockMovement(dto);
 
             return result.Status switch
             {
@@ -74,3 +74,4 @@ namespace POS.API.Controllers
         }
     }
 }
+
