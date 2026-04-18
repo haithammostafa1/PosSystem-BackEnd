@@ -13,7 +13,7 @@ namespace Pos.Datalayer
 {
     public interface IInvoiceDetailsRepository
     {
-        Task<int> AddInvoiceDetails(List<InvoiceDetailSaveDto> details);
+         Task<int> AddInvoiceDetails(int invoiceId, List<InvoiceDetailSaveDto> details);
         Task<List<InvoiceDetailResponseDto>> GetInvoiceDetailsByInvoiceId(int invoiceId);
         Task<int> DeleteInvoiceDetailsByInvoiceId(int invoiceId);
     }
@@ -27,25 +27,23 @@ namespace Pos.Datalayer
                 ?? throw new InvalidOperationException("Connection string not found.");
         }
 
-        public async Task<int> AddInvoiceDetails(List<InvoiceDetailSaveDto> details)
+        public async Task<int> AddInvoiceDetails(int invoiceId, List<InvoiceDetailSaveDto> details)
         {
-            Log.Information("DAL: Adding invoice details count {Count}", details.Count);
-
             using SqlConnection conn = new(_connectionString);
             using SqlCommand cmd = new("sp_AddInvoiceDetails", conn);
 
             cmd.CommandType = CommandType.StoredProcedure;
 
+            cmd.Parameters.Add("@InvoiceId", SqlDbType.Int).Value = invoiceId;
+
             var table = new DataTable();
-            table.Columns.Add("InvoiceId", typeof(int));
             table.Columns.Add("ProductId", typeof(int));
             table.Columns.Add("Quantity", typeof(int));
             table.Columns.Add("Price", typeof(decimal));
-            table.Columns.Add("Total", typeof(decimal));
 
             foreach (var item in details)
             {
-                table.Rows.Add(item.InvoiceId, item.ProductId, item.Quantity, item.Price, item.Total);
+                table.Rows.Add(item.ProductId, item.Quantity, item.Price);
             }
 
             var param = cmd.Parameters.AddWithValue("@Details", table);
@@ -53,6 +51,7 @@ namespace Pos.Datalayer
             param.TypeName = "dbo.InvoiceDetailsType";
 
             await conn.OpenAsync();
+
             return await cmd.ExecuteNonQueryAsync();
         }
 
@@ -77,8 +76,8 @@ namespace Pos.Datalayer
                 list.Add(new InvoiceDetailResponseDto
                 {
                     Id = reader.GetInt32(reader.GetOrdinal("Id")),
-                    InvoiceId = reader.GetInt32(reader.GetOrdinal("InvoiceId")),
                     ProductId = reader.GetInt32(reader.GetOrdinal("ProductId")),
+                    ProductName = reader.GetString(reader.GetOrdinal("ProductName")),
                     Quantity = reader.GetInt32(reader.GetOrdinal("Quantity")),
                     Price = reader.GetDecimal(reader.GetOrdinal("Price")),
                     Total = reader.GetDecimal(reader.GetOrdinal("Total"))

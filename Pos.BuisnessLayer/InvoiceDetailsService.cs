@@ -12,7 +12,7 @@ namespace Pos.BuisnessLayer
 {
     public interface IInvoiceDetailsService
     {
-        Task<OperationResult<int>> AddInvoiceDetails(List<InvoiceDetailSaveDto> details);
+        Task<OperationResult<int>> AddInvoiceDetails(int invoiceId, List<InvoiceDetailSaveDto> details);
         Task<OperationResult<List<InvoiceDetailResponseDto>>> GetByInvoiceId(int invoiceId);
         Task<OperationResult<int>> DeleteByInvoiceId(int invoiceId);
     }
@@ -25,7 +25,7 @@ namespace Pos.BuisnessLayer
             _repo = repo;
         }
 
-        public async Task<OperationResult<int>> AddInvoiceDetails(List<InvoiceDetailSaveDto> details)
+        public async Task<OperationResult<int>> AddInvoiceDetails(int invoiceId, List<InvoiceDetailSaveDto> details)
         {
             Log.Information("Service: Adding invoice details count {Count}", details?.Count);
 
@@ -49,7 +49,7 @@ namespace Pos.BuisnessLayer
                     }
                 }
 
-                int result = await _repo.AddInvoiceDetails(details);
+                int result = await _repo.AddInvoiceDetails(invoiceId, details);
 
                 return result switch
                 {
