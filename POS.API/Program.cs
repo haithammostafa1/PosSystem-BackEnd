@@ -26,6 +26,7 @@ builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<IInvoiceDetailsService, InvoiceDetailsService>();
 builder.Services.AddScoped<IInvoiceDetailsRepository, InvoiceDetailsRepository>();
+builder.Services.AddScoped<IFileService, FileService>();
 
 builder.Services.AddSwaggerGen();
 
@@ -39,7 +40,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
+app.UseStaticFiles();
 app.UseAuthorization();
 
 app.MapControllers();
